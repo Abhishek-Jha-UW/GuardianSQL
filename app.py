@@ -18,48 +18,46 @@ if uploaded_file:
     # Load Data
     df = pd.read_csv(uploaded_file)
     auditor = GuardianAuditor(df)
-    
+
     # 3. User Input for Specific Checks
     st.sidebar.markdown("### Audit Settings")
-    
+
     # Validity & Accuracy Selection
     numeric_cols = st.sidebar.multiselect(
-        "Select Numeric Columns for Validity/Accuracy Check", 
+        "Select Numeric Columns for Validity/Accuracy Check",
         df.select_dtypes(include=['number']).columns
     )
-    
+
     # Timeliness Selection
     date_col = st.sidebar.selectbox(
-        "Select Date Column for Timeliness Check", 
+        "Select Date Column for Timeliness Check",
         [None] + list(df.columns)
     )
 
-    # NEW: Consistency Selection (Moved here to affect Health Score)
+    # Consistency Selection
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Consistency Rules")
     st.sidebar.info("Rule: Column A should be >= Column B")
+
     col_a = st.sidebar.selectbox("Select Column A", df.columns, index=0)
     col_b = st.sidebar.selectbox("Select Column B", df.columns, index=1)
 
     # 4. Run C.C.U.V.A.T. Logic
-    # These run first so the 'overall_score' is accurate
     null_stats = auditor.check_completeness()
     dupe_count = auditor.check_uniqueness()
-    
-    # We store these in variables so we can use them in the tabs below
+
     validity_results = {}
     outlier_results = {}
 
     if numeric_cols:
         validity_results = auditor.check_validity(numeric_cols)
         outlier_results = auditor.check_accuracy(numeric_cols)
-        
+
     if date_col:
         auditor.check_timeliness(date_col)
 
-    # Automatically run consistency based on sidebar selection
     inc_count = auditor.check_consistency(col_a, col_b)
-    
+
     overall_score = auditor.get_overall_health_score()
 
     # 5. Display Top-Level Metrics
@@ -71,28 +69,47 @@ if uploaded_file:
     st.markdown("---")
 
     # 6. Detailed Analysis Tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Completeness", "🧪 Validity & Dupes", "🎯 Accuracy & Consistency", "🗂️ Data View"])
-    
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📊 Completeness",
+        "🧪 Validity & Dupes",
+        "🎯 Accuracy & Consistency",
+        "🗂️ Data View"
+    ])
+
+    # --- TAB 1: COMPLETENESS ---
     with tab1:
         st.write("### Missing Values by Column")
         null_df = null_stats.reset_index()
         null_df.columns = ['Column', 'Completeness %']
-        fig = px.bar(null_df, x='Column', y='Completeness %', 
-                     color='Completeness %', color_continuous_scale='RdYlGn')
+
+        fig = px.bar(
+            null_df,
+            x='Column',
+            y='Completeness %',
+            color='Completeness %',
+            color_continuous_scale='RdYlGn'
+        )
         st.plotly_chart(fig, use_container_width=True)
 
+    # --- TAB 2: VALIDITY & DUPES ---
     with tab2:
         col_left, col_right = st.columns(2)
+
         with col_left:
             st.write("### Uniqueness Check")
-            if dupe_count > 0: st.warning(f"Found {dupe_count} duplicates.")
-            else: st.success("No duplicates detected!")
-        
+            if dupe_count > 0:
+                st.warning(f"Found {dupe_count} duplicates.")
+            else:
+                st.success("No duplicates detected!")
+
         with col_right:
             st.write("### Validity (Negative Value Check)")
-            if numeric_cols: st.write(validity_results)
-            else: st.info("Select columns in sidebar.")
+            if numeric_cols:
+                st.write(validity_results)
+            else:
+                st.info("Select columns in sidebar.")
 
+    # --- TAB 3: ACCURACY & CONSISTENCY ---
     with tab3:
         st.write("### Accuracy (Outlier Detection)")
         if numeric_cols:
@@ -103,11 +120,14 @@ if uploaded_file:
 
         st.markdown("---")
         st.write(f"### Consistency Check: {col_a} vs {col_b}")
-        # Note: We don't need the button anymore because it runs automatically now!
+
         if inc_count > 0:
-            st.error(f"Inconsistency Found: {inc_count} rows where {col_a} is less than {col_b}.")
+            st.error(
+                f"Inconsistency Found: {inc_count} rows where {col_a} is less than {col_b}."
+            )
         else:
             st.success("Logic holds! No inconsistencies found.")
 
+    # --- TAB 4: DATA VIEW ---
     with tab4:
         st.dataframe(df.head(10))
