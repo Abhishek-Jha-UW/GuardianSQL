@@ -71,3 +71,36 @@ class GuardianAuditor:
         if not self.report_summary:
             return 0
         return sum(self.report_summary.values()) / len(self.report_summary)
+
+    def check_accuracy(self, columns):
+        """
+        A - Accuracy: Uses IQR to find statistical outliers.
+        """
+        outlier_report = {}
+        for col in columns:
+            Q1 = self.df[col].quantile(0.25)
+            Q3 = self.df[col].quantile(0.75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            
+            outliers = self.df[(self.df[col] < lower_bound) | (self.df[col] > upper_bound)]
+            outlier_report[col] = len(outliers)
+        
+        # Scoring: penalty based on % of outliers
+        total_outliers = sum(outlier_report.values())
+        accuracy_score = max(0, 100 - (total_outliers / self.total_rows * 100))
+        self.report_summary['accuracy'] = accuracy_score
+        return outlier_report
+
+    def check_consistency(self, col_a, col_b, relationship="a_gt_b"):
+        """
+        C - Consistency: Checks if logical relationships hold (e.g., Total >= Added).
+        """
+        if relationship == "a_gt_b":
+            inconsistent = self.df[self.df[col_a] < self.df[col_b]]
+        
+        inconsistent_count = len(inconsistent)
+        consistency_score = max(0, 100 - (inconsistent_count / self.total_rows * 100))
+        self.report_summary['consistency'] = consistency_score
+        return inconsistent_count
