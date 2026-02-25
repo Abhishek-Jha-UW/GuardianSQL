@@ -3,47 +3,71 @@ import pandas as pd
 import plotly.express as px
 from model import GuardianAuditor
 
-# 1. Page Configuration
-st.set_page_config(page_title="GuardianSQL | Data Quality Auditor", layout="wide")
+# -----------------------------
+# Page Configuration
+# -----------------------------
+st.set_page_config(
+    page_title="GuardianSQL | Data Quality Auditor",
+    layout="wide"
+)
 
 st.title("🛡️ GuardianSQL")
 st.subheader("Automated Data Quality & Governance Auditor")
 st.markdown("---")
 
-# 2. Sidebar - File Upload
+# -----------------------------
+# Sidebar - File Upload
+# -----------------------------
 st.sidebar.header("Configuration")
 uploaded_file = st.sidebar.file_uploader("Upload CSV Dataset", type=["csv"])
 
-if uploaded_file:
-    # Load Data
-    df = pd.read_csv(uploaded_file)
-    auditor = GuardianAuditor(df)
+if uploaded_file is not None:
+    try:
+        df = pd.read_csv(uploaded_file)
 
-    # 3. User Input for Specific Checks
+        if df.empty:
+            st.error("Uploaded file is empty.")
+            st.stop()
+
+        auditor = GuardianAuditor(df)
+
+    except Exception as e:
+        st.error(f"Error loading file: {e}")
+        st.stop()
+
+    # -----------------------------
+    # Sidebar Settings
+    # -----------------------------
     st.sidebar.markdown("### Audit Settings")
 
-    # Validity & Accuracy Selection
+    numeric_columns_available = df.select_dtypes(include=["number"]).columns.tolist()
+
     numeric_cols = st.sidebar.multiselect(
         "Select Numeric Columns for Validity/Accuracy Check",
-        df.select_dtypes(include=['number']).columns
+        numeric_columns_available
     )
 
-    # Timeliness Selection
     date_col = st.sidebar.selectbox(
         "Select Date Column for Timeliness Check",
-        [None] + list(df.columns)
+        ["None"] + df.columns.tolist()
     )
 
-    # Consistency Selection
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Consistency Rules")
     st.sidebar.info("Rule: Column A should be >= Column B")
 
-    col_a = st.sidebar.selectbox("Select Column A", df.columns, index=0)
-    col_b = st.sidebar.selectbox("Select Column B", df.columns, index=1)
+    col_list = df.columns.tolist()
 
-    # 4. Run C.C.U.V.A.T. Logic
-    null_stats = auditor.check_completeness()
+    col_a = st.sidebar.selectbox("Select Column A", col_list, index=0)
+
+    # Safe index for second column
+    col_b_index = 1 if len(col_list) > 1 else 0
+    col_b = st.sidebar.selectbox("Select Column B", col_list, index=col_b_index)
+
+    # -----------------------------
+    # Run Checks
+    # -----------------------------
+    completeness_dict = auditor.check_completeness()
     dupe_count = auditor.check_uniqueness()
 
     validity_results = {}
@@ -53,22 +77,26 @@ if uploaded_file:
         validity_results = auditor.check_validity(numeric_cols)
         outlier_results = auditor.check_accuracy(numeric_cols)
 
-    if date_col:
+    if date_col != "None":
         auditor.check_timeliness(date_col)
 
     inc_count = auditor.check_consistency(col_a, col_b)
-
     overall_score = auditor.get_overall_health_score()
 
-    # 5. Display Top-Level Metrics
+    # -----------------------------
+    # Top Metrics
+    # -----------------------------
     col1, col2, col3 = st.columns(3)
+
     col1.metric("Overall Data Health", f"{overall_score:.1f}%")
     col2.metric("Total Records", len(df))
     col3.metric("Duplicate Rows", dupe_count)
 
     st.markdown("---")
 
-    # 6. Detailed Analysis Tabs
+    # -----------------------------
+    # Tabs
+    # -----------------------------
     tab1, tab2, tab3, tab4 = st.tabs([
         "📊 Completeness",
         "🧪 Validity & Dupes",
@@ -76,44 +104,57 @@ if uploaded_file:
         "🗂️ Data View"
     ])
 
-    # --- TAB 1: COMPLETENESS ---
+    # -----------------------------
+    # TAB 1: COMPLETENESS
+    # -----------------------------
     with tab1:
         st.write("### Missing Values by Column")
-        null_df = null_stats.reset_index()
-        null_df.columns = ['Column', 'Completeness %']
 
-        fig = px.bar(
-            null_df,
-            x='Column',
-            y='Completeness %',
-            color='Completeness %',
-            color_continuous_scale='RdYlGn'
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        if completeness_dict:
+            null_df = pd.DataFrame(
+                list(completeness_dict.items()),
+                columns=["Column", "Completeness %"]
+            )
 
-    # --- TAB 2: VALIDITY & DUPES ---
+            fig = px.bar(
+                null_df,
+                x="Column",
+                y="Completeness %",
+                color="Completeness %",
+                color_continuous_scale="RdYlGn"
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No data available.")
+
+    # -----------------------------
+    # TAB 2: VALIDITY & DUPES
+    # -----------------------------
     with tab2:
         col_left, col_right = st.columns(2)
 
         with col_left:
             st.write("### Uniqueness Check")
             if dupe_count > 0:
-                st.warning(f"Found {dupe_count} duplicates.")
+                st.warning(f"Found {dupe_count} duplicate rows.")
             else:
                 st.success("No duplicates detected!")
 
         with col_right:
             st.write("### Validity (Negative Value Check)")
             if numeric_cols:
-                st.write(validity_results)
+                st.json(validity_results)
             else:
-                st.info("Select columns in sidebar.")
+                st.info("Select numeric columns in sidebar.")
 
-    # --- TAB 3: ACCURACY & CONSISTENCY ---
+    # -----------------------------
+    # TAB 3: ACCURACY & CONSISTENCY
+    # -----------------------------
     with tab3:
         st.write("### Accuracy (Outlier Detection)")
+
         if numeric_cols:
-            st.write("Outliers detected (Values outside 1.5x IQR):")
             st.json(outlier_results)
         else:
             st.info("Select numeric columns in sidebar.")
@@ -123,11 +164,17 @@ if uploaded_file:
 
         if inc_count > 0:
             st.error(
-                f"Inconsistency Found: {inc_count} rows where {col_a} is less than {col_b}."
+                f"Inconsistency Found: {inc_count} rows where "
+                f"{col_a} < {col_b}"
             )
         else:
-            st.success("Logic holds! No inconsistencies found.")
+            st.success("No inconsistencies found.")
 
-    # --- TAB 4: DATA VIEW ---
+    # -----------------------------
+    # TAB 4: DATA VIEW
+    # -----------------------------
     with tab4:
         st.dataframe(df.head(10))
+
+else:
+    st.info("Please upload a CSV file to begin auditing.")
