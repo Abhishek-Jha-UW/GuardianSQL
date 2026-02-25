@@ -93,14 +93,21 @@ class GuardianAuditor:
         self.report_summary['accuracy'] = accuracy_score
         return outlier_report
 
-    def check_consistency(self, col_a, col_b, relationship="a_gt_b"):
-        """
-        C - Consistency: Checks if logical relationships hold (e.g., Total >= Added).
-        """
-        if relationship == "a_gt_b":
-            inconsistent = self.df[self.df[col_a] < self.df[col_b]]
-        
-        inconsistent_count = len(inconsistent)
-        consistency_score = max(0, 100 - (inconsistent_count / self.total_rows * 100))
-        self.report_summary['consistency'] = consistency_score
-        return inconsistent_count
+    def check_consistency(self, col_a, col_b, relationship="a_ge_b"):
+    """
+    C - Consistency: Checks if A is Greater than or Equal to B.
+    Flagging cases where A < B (The impossible scenarios).
+    """
+    # We want to find rows that BREAK the rule. 
+    # The rule is A >= B. Therefore, an error is any row where A < B.
+    inconsistent = self.df[self.df[col_a] < self.df[col_b]]
+    
+    inconsistent_count = len(inconsistent)
+    
+    # Calculate score (Percentage of records that are consistent)
+    consistency_score = max(0, 100 - (inconsistent_count / self.total_rows * 100))
+    
+    # CRITICAL: Update the summary dictionary so the Health Score sees it
+    self.report_summary['consistency'] = consistency_score
+    
+    return inconsistent_count
