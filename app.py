@@ -46,17 +46,20 @@ if uploaded_file:
     null_stats = auditor.check_completeness()
     dupe_count = auditor.check_uniqueness()
     
+    # We store these in variables so we can use them in the tabs below
+    validity_results = {}
+    outlier_results = {}
+
     if numeric_cols:
-        auditor.check_validity(numeric_cols)
-        auditor.check_accuracy(numeric_cols)
+        validity_results = auditor.check_validity(numeric_cols)
+        outlier_results = auditor.check_accuracy(numeric_cols)
         
     if date_col:
         auditor.check_timeliness(date_col)
 
-    # This now uses the A >= B logic and updates report_summary
+    # Automatically run consistency based on sidebar selection
     inc_count = auditor.check_consistency(col_a, col_b)
     
-    # FINALLY, calculate health score (Now it won't be 100% if errors exist!)
     overall_score = auditor.get_overall_health_score()
 
     # 5. Display Top-Level Metrics
@@ -68,19 +71,13 @@ if uploaded_file:
     st.markdown("---")
 
     # 6. Detailed Analysis Tabs
-    if numeric_cols:
-        auditor.check_validity(numeric_cols)
-        outlier_results = auditor.check_accuracy(numeric_cols) # New Accuracy Check
-
     tab1, tab2, tab3, tab4 = st.tabs(["📊 Completeness", "🧪 Validity & Dupes", "🎯 Accuracy & Consistency", "🗂️ Data View"])
     
     with tab1:
         st.write("### Missing Values by Column")
-        # Turn Series into DataFrame for Plotly
         null_df = null_stats.reset_index()
         null_df.columns = ['Column', 'Completeness %']
         fig = px.bar(null_df, x='Column', y='Completeness %', 
-                     title="Data Completeness (Goal: 100%)",
                      color='Completeness %', color_continuous_scale='RdYlGn')
         st.plotly_chart(fig, use_container_width=True)
 
@@ -88,18 +85,13 @@ if uploaded_file:
         col_left, col_right = st.columns(2)
         with col_left:
             st.write("### Uniqueness Check")
-            if dupe_count > 0:
-                st.warning(f"Found {dupe_count} duplicate rows.")
-            else:
-                st.success("No duplicate rows detected!")
+            if dupe_count > 0: st.warning(f"Found {dupe_count} duplicates.")
+            else: st.success("No duplicates detected!")
         
         with col_right:
             st.write("### Validity (Negative Value Check)")
-            if numeric_cols:
-                validity_results = auditor.check_validity(numeric_cols)
-                st.write(validity_results)
-            else:
-                st.info("Select numeric columns in the sidebar to run validity checks.")
+            if numeric_cols: st.write(validity_results)
+            else: st.info("Select columns in sidebar.")
 
     with tab3:
         st.write("### Accuracy (Outlier Detection)")
@@ -107,20 +99,15 @@ if uploaded_file:
             st.write("Outliers detected (Values outside 1.5x IQR):")
             st.json(outlier_results)
         else:
-            st.info("Select numeric columns to check for outliers.")
+            st.info("Select numeric columns in sidebar.")
 
         st.markdown("---")
-        st.write("### Consistency Check")
-        col_a = st.selectbox("Primary Column (e.g., Total Units)", df.columns, key="ca")
-        col_b = st.selectbox("Secondary Column (e.g., Units Added)", df.columns, key="cb")
-        
-        if st.button("Run Consistency Audit"):
-            inc_count = auditor.check_consistency(col_a, col_b)
-            if inc_count > 0:
-                st.error(f"Inconsistency Found: {inc_count} rows where {col_a} is less than {col_b}.")
-            else:
-                st.success("Logic holds! No inconsistencies found.")
+        st.write(f"### Consistency Check: {col_a} vs {col_b}")
+        # Note: We don't need the button anymore because it runs automatically now!
+        if inc_count > 0:
+            st.error(f"Inconsistency Found: {inc_count} rows where {col_a} is less than {col_b}.")
+        else:
+            st.success("Logic holds! No inconsistencies found.")
 
     with tab4:
-        st.write("### Sample Data Snippet")
         st.dataframe(df.head(10))
