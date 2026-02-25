@@ -46,8 +46,12 @@ if uploaded_file:
     st.markdown("---")
 
     # 6. Detailed Analysis Tabs
-    tab1, tab2, tab3 = st.tabs(["📊 Completeness Report", "🧪 Validity & Duplicates", "🗂️ Raw Data View"])
+    if numeric_cols:
+        auditor.check_validity(numeric_cols)
+        outlier_results = auditor.check_accuracy(numeric_cols) # New Accuracy Check
 
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Completeness", "🧪 Validity & Dupes", "🎯 Accuracy & Consistency", "🗂️ Data View"])
+    
     with tab1:
         st.write("### Missing Values by Column")
         # Turn Series into DataFrame for Plotly
@@ -76,10 +80,25 @@ if uploaded_file:
                 st.info("Select numeric columns in the sidebar to run validity checks.")
 
     with tab3:
+        st.write("### Accuracy (Outlier Detection)")
+        if numeric_cols:
+            st.write("Outliers detected (Values outside 1.5x IQR):")
+            st.json(outlier_results)
+        else:
+            st.info("Select numeric columns to check for outliers.")
+
+        st.markdown("---")
+        st.write("### Consistency Check")
+        col_a = st.selectbox("Primary Column (e.g., Total Units)", df.columns, key="ca")
+        col_b = st.selectbox("Secondary Column (e.g., Units Added)", df.columns, key="cb")
+        
+        if st.button("Run Consistency Audit"):
+            inc_count = auditor.check_consistency(col_a, col_b)
+            if inc_count > 0:
+                st.error(f"Inconsistency Found: {inc_count} rows where {col_a} is less than {col_b}.")
+            else:
+                st.success("Logic holds! No inconsistencies found.")
+
+    with tab4:
         st.write("### Sample Data Snippet")
         st.dataframe(df.head(10))
-
-else:
-    # Default landing state
-    st.info("Please upload a CSV file in the sidebar to begin the Data Quality Audit.")
-    st.image("https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=1000", caption="Ready to audit your data pipelines.")
