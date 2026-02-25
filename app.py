@@ -177,4 +177,10 @@ if uploaded_file is not None:
         st.dataframe(df.head(10))
 
 else:
+    # This is what the user sees BEFORE uploading
     st.info("Please upload a CSV file to begin auditing.")
+    
+    # You can use a URL for a clean tech/data related image
+    st.image("https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=2070", 
+             caption="Upload a dataset to generate a C.C.U.V.A.T. Health Report",
+             use_container_width=True)
