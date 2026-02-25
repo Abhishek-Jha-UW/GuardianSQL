@@ -155,21 +155,18 @@ if uploaded_file is not None:
         st.write("### Accuracy (Outlier Detection)")
 
         if numeric_cols:
+            # New Visual: Box Plot
+            st.write("#### Statistical Distribution")
+            fig_box = px.box(df, y=numeric_cols, 
+                             title="Outlier Visualization (Box & Whiskers)",
+                             template="plotly_dark",
+                             color_discrete_sequence=['#00CC96'])
+            st.plotly_chart(fig_box, use_container_width=True)
+            
+            st.write("#### Raw Outlier Counts")
             st.json(outlier_results)
         else:
-            st.info("Select numeric columns in sidebar.")
-
-        st.markdown("---")
-        st.write(f"### Consistency Check: {col_a} vs {col_b}")
-
-        if inc_count > 0:
-            st.error(
-                f"Inconsistency Found: {inc_count} rows where "
-                f"{col_a} < {col_b}"
-            )
-        else:
-            st.success("No inconsistencies found.")
-
+            st.info("Select numeric columns in sidebar to see distribution and outliers.")
     # -----------------------------
     # TAB 4: DATA VIEW
     # -----------------------------
