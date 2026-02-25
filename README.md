@@ -3,7 +3,7 @@
 **GuardianSQL** is a pro-active data governance tool built to ensure datasets are "Decision-Ready." While standard exploratory data analysis (EDA) focuses on trends, GuardianSQL focuses on **Integrity**, identifying risks before they reach the dashboard.
 
 ## Key Value Proposition
-In my experience managing $9M+ business segments, I realized that bad data leads to bad decisions. I built this tool to automate the **C.C.U.V.A.T.** framework, reducing the time spent on manual data profiling by nearly 40%.
+In my experience managing $9M+ business segments, I realized that bad data leads to bad decisions. I built this tool to automate the **C.C.U.V.A.T.** framework, reducing the time spent on manual data profiling by more than 40%.
 
 ## The C.C.U.V.A.T. Framework
 The auditor evaluates data across six critical dimensions:
@@ -14,11 +14,6 @@ The auditor evaluates data across six critical dimensions:
 - **A**ccuracy: Identifies statistical outliers that may indicate data entry errors.
 - **T**imeliness: Measures data "freshness" based on timestamps.
 
-## Tech Stack
-- **Frontend:** Streamlit (Python-based Web Framework)
-- **Logic:** Pandas & NumPy
-- **Visuals:** Plotly Interactive Charts
-- **Infrastructure:** GitHub & Streamlit Community Cloud
 
 ## Impact
 - **Automated Health Scoring:** Provides a 0-100% "Trust Score" for any uploaded CSV/SQL table.
