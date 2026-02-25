@@ -21,20 +21,42 @@ if uploaded_file:
     
     # 3. User Input for Specific Checks
     st.sidebar.markdown("### Audit Settings")
-    numeric_cols = st.sidebar.multiselect("Select Numeric Columns for Validity Check (e.g., Price, Qty)", df.select_dtypes(include=['number']).columns)
-    date_col = st.sidebar.selectbox("Select Date Column for Timeliness Check", [None] + list(df.columns))
+    
+    # Validity & Accuracy Selection
+    numeric_cols = st.sidebar.multiselect(
+        "Select Numeric Columns for Validity/Accuracy Check", 
+        df.select_dtypes(include=['number']).columns
+    )
+    
+    # Timeliness Selection
+    date_col = st.sidebar.selectbox(
+        "Select Date Column for Timeliness Check", 
+        [None] + list(df.columns)
+    )
+
+    # NEW: Consistency Selection (Moved here to affect Health Score)
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Consistency Rules")
+    st.sidebar.info("Rule: Column A should be >= Column B")
+    col_a = st.sidebar.selectbox("Select Column A", df.columns, index=0)
+    col_b = st.sidebar.selectbox("Select Column B", df.columns, index=1)
 
     # 4. Run C.C.U.V.A.T. Logic
-    # Completeness & Uniqueness run automatically
+    # These run first so the 'overall_score' is accurate
     null_stats = auditor.check_completeness()
     dupe_count = auditor.check_uniqueness()
     
-    # Optional checks based on user input
     if numeric_cols:
         auditor.check_validity(numeric_cols)
+        auditor.check_accuracy(numeric_cols)
+        
     if date_col:
         auditor.check_timeliness(date_col)
+
+    # This now uses the A >= B logic and updates report_summary
+    inc_count = auditor.check_consistency(col_a, col_b)
     
+    # FINALLY, calculate health score (Now it won't be 100% if errors exist!)
     overall_score = auditor.get_overall_health_score()
 
     # 5. Display Top-Level Metrics
