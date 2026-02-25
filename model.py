@@ -9,6 +9,7 @@ class GuardianAuditor:
 
     def check_completeness(self):
         null_counts = self.df.isnull().sum()
+        # Calculate completion percentage for each column
         completeness_pct = ((self.total_rows - null_counts) / self.total_rows) * 100
         self.report_summary['completeness'] = completeness_pct.mean()
         return completeness_pct
@@ -23,6 +24,7 @@ class GuardianAuditor:
         validity_issues = {}
         if numeric_columns:
             for col in numeric_columns:
+                # Find negative values (Validity Error)
                 invalid_count = (self.df[col] < 0).sum()
                 validity_issues[col] = int(invalid_count)
         
@@ -39,6 +41,7 @@ class GuardianAuditor:
             IQR = Q3 - Q1
             lower_bound = Q1 - 1.5 * IQR
             upper_bound = Q3 + 1.5 * IQR
+            # Detect values outside the 1.5x IQR whiskers
             outliers = self.df[(self.df[col] < lower_bound) | (self.df[col] > upper_bound)]
             outlier_report[col] = len(outliers)
         
@@ -48,7 +51,7 @@ class GuardianAuditor:
         return outlier_report
 
     def check_consistency(self, col_a, col_b):
-        # Rule: A should be >= B. Error is A < B.
+        # New Rule: A should be >= B. Error occurs if A < B.
         inconsistent_df = self.df[self.df[col_a] < self.df[col_b]]
         inconsistent_count = len(inconsistent_df)
         
@@ -61,10 +64,11 @@ class GuardianAuditor:
             self.df[date_column] = pd.to_datetime(self.df[date_column])
             latest_date = self.df[date_column].max()
             days_since_update = (pd.Timestamp.now() - latest_date).days
+            # Penalize score based on age
             timeliness_score = max(0, 100 - (days_since_update * 2)) 
             self.report_summary['timeliness'] = timeliness_score
             return days_since_update
-        except:
+        except Exception:
             return None
 
     def get_overall_health_score(self):
