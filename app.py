@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from model import GuardianAuditor
+import numpy as np
 
 # -----------------------------
 # Page Configuration
@@ -16,40 +17,82 @@ st.subheader("Automated Data Quality & Governance Auditor")
 st.markdown("---")
 
 # -----------------------------
-# Sidebar - File Upload
+# Initialize Session State
+# -----------------------------
+# We use this to remember if the user clicked the sample data button
+if "use_sample_data" not in st.session_state:
+    st.session_state.use_sample_data = False
+
+# -----------------------------
+# Sidebar - File Upload & Sample
 # -----------------------------
 st.sidebar.header("Configuration")
+
+# 1. Option to use sample data
+if st.sidebar.button("🧪 Load Sample Data"):
+    st.session_state.use_sample_data = True
+
+st.sidebar.markdown("**OR**")
+
+# 2. Option to upload custom data
 uploaded_file = st.sidebar.file_uploader("Upload CSV Dataset", type=["csv"])
 
+# If a user uploads a file, turn off the sample data mode
 if uploaded_file is not None:
-    try:
-        df = pd.read_csv(uploaded_file)
+    st.session_state.use_sample_data = False
 
+# -----------------------------
+# Data Loading Logic
+# -----------------------------
+df = None
+
+try:
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
         if df.empty:
             st.error("Uploaded file is empty.")
             st.stop()
+            
+    elif st.session_state.use_sample_data:
+        # Generate a virtual dataset with intentional quality issues
+        st.sidebar.success("Using Virtual Sample Data")
+        df = pd.DataFrame({
+            "Transaction_ID": [101, 102, 103, 104, 105, 105], # Duplicate ID
+            "Revenue": [1500, 2300, -50, 4100, 99999, 99999], # Negative value & massive outlier
+            "Cost": [1000, 2500, 20, 3000, 50000, 50000], # Cost > Revenue anomaly for consistency check
+            "Date": ["2023-01-01", "2023-01-02", None, "2023-01-04", "2023-01-05", "2023-01-05"], # Missing value
+            "Category": ["Tech", "Home", "Tech", "Toys", "Tech", "Tech"]
+        })
 
-        auditor = GuardianAuditor(df)
+except Exception as e:
+    st.error(f"Error loading data: {e}")
+    st.stop()
 
-    except Exception as e:
-        st.error(f"Error loading file: {e}")
-        st.stop()
+# -----------------------------
+# Main App Logic (Only runs if data exists)
+# -----------------------------
+if df is not None:
+    auditor = GuardianAuditor(df)
 
     # -----------------------------
     # Sidebar Settings
     # -----------------------------
+    st.sidebar.markdown("---")
     st.sidebar.markdown("### Audit Settings")
 
     numeric_columns_available = df.select_dtypes(include=["number"]).columns.tolist()
 
     numeric_cols = st.sidebar.multiselect(
         "Select Numeric Columns for Validity/Accuracy Check",
-        numeric_columns_available
+        numeric_columns_available,
+        # Default selection for better UX if using sample data
+        default=["Revenue", "Cost"] if st.session_state.use_sample_data else None
     )
 
     date_col = st.sidebar.selectbox(
         "Select Date Column for Timeliness Check",
-        ["None"] + df.columns.tolist()
+        ["None"] + df.columns.tolist(),
+        index=df.columns.tolist().index("Date") + 1 if st.session_state.use_sample_data else 0
     )
 
     st.sidebar.markdown("---")
@@ -58,11 +101,12 @@ if uploaded_file is not None:
 
     col_list = df.columns.tolist()
 
-    col_a = st.sidebar.selectbox("Select Column A", col_list, index=0)
+    # Pre-select columns for consistency check if using sample data
+    default_a = col_list.index("Revenue") if st.session_state.use_sample_data else 0
+    col_a = st.sidebar.selectbox("Select Column A", col_list, index=default_a)
 
-    # Safe index for second column
-    col_b_index = 1 if len(col_list) > 1 else 0
-    col_b = st.sidebar.selectbox("Select Column B", col_list, index=col_b_index)
+    default_b = col_list.index("Cost") if st.session_state.use_sample_data else (1 if len(col_list) > 1 else 0)
+    col_b = st.sidebar.selectbox("Select Column B", col_list, index=default_b)
 
     # -----------------------------
     # Run Checks
@@ -155,7 +199,6 @@ if uploaded_file is not None:
         st.write("### Accuracy (Outlier Detection)")
 
         if numeric_cols:
-            # New Visual: Box Plot
             st.write("#### Statistical Distribution")
             fig_box = px.box(df, y=numeric_cols, 
                              title="Outlier Visualization (Box & Whiskers)",
@@ -167,17 +210,17 @@ if uploaded_file is not None:
             st.json(outlier_results)
         else:
             st.info("Select numeric columns in sidebar to see distribution and outliers.")
+            
     # -----------------------------
     # TAB 4: DATA VIEW
     # -----------------------------
     with tab4:
-        st.dataframe(df.head(10))
+        st.dataframe(df)
 
 else:
-    # This is what the user sees BEFORE uploading
-    st.info("Please upload a CSV file to begin auditing.")
+    # This is what the user sees BEFORE uploading or clicking sample data
+    st.info("Please upload a CSV file or load the sample dataset to begin auditing.")
     
-    # You can use a URL for a clean tech/data related image
     st.image("https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=2070", 
              caption="Upload a dataset to generate a C.C.U.V.A.T. Health Report",
              use_container_width=True)
