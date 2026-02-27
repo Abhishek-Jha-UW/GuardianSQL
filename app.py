@@ -1,48 +1,71 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
 from model import GuardianAuditor
 
-# -----------------------------
-# Page Configuration
-# -----------------------------
+# -------------------------------------------------
+# PAGE CONFIG
+# -------------------------------------------------
 st.set_page_config(
     page_title="GuardianSQL | Data Quality Auditor",
     layout="wide"
 )
 
-st.title("🛡️ GuardianSQL")
-st.subheader("Automated Data Quality & Governance Auditor")
+# -------------------------------------------------
+# PROFESSIONAL STYLING
+# -------------------------------------------------
+st.markdown("""
+<style>
+.main {
+    background-color: #f7f9fb;
+}
+h1, h2, h3 {
+    font-weight: 600;
+}
+[data-testid="metric-container"] {
+    background-color: white;
+    border: 1px solid #e6e9ef;
+    padding: 18px;
+    border-radius: 10px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.title("GuardianSQL")
+st.caption("Enterprise Data Quality & Governance Auditor")
+
 st.markdown("---")
 
-# -----------------------------
-# Initialize Session State
-# -----------------------------
+# -------------------------------------------------
+# SESSION STATE
+# -------------------------------------------------
 if "use_sample_data" not in st.session_state:
     st.session_state.use_sample_data = False
+
 if "cleaned_df" not in st.session_state:
     st.session_state.cleaned_df = None
 
-# -----------------------------
-# Sidebar - File Upload & Sample
-# -----------------------------
-st.sidebar.header("Configuration")
+# -------------------------------------------------
+# SIDEBAR
+# -------------------------------------------------
+st.sidebar.header("Data Configuration")
 
-if st.sidebar.button("🧪 Load Sample Data"):
+if st.sidebar.button("Load Enterprise Sample Dataset"):
     st.session_state.use_sample_data = True
-    st.session_state.cleaned_df = None # Reset clean data on new load
+    st.session_state.cleaned_df = None
 
-st.sidebar.markdown("**OR**")
+st.sidebar.markdown("OR")
 
-uploaded_file = st.sidebar.file_uploader("Upload CSV Dataset", type=["csv"])
+uploaded_file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
 
 if uploaded_file is not None:
     st.session_state.use_sample_data = False
     st.session_state.cleaned_df = None
 
-# -----------------------------
-# Data Loading Logic
-# -----------------------------
+# -------------------------------------------------
+# DATA LOADING
+# -------------------------------------------------
 df = None
 
 try:
@@ -51,65 +74,74 @@ try:
         if df.empty:
             st.error("Uploaded file is empty.")
             st.stop()
-            
+
     elif st.session_state.use_sample_data:
-        st.sidebar.success("Using Virtual Sample Data")
+
+        np.random.seed(42)
+        n = 1500
+
         df = pd.DataFrame({
-            "Transaction_ID": [101, 102, 103, 104, 105, 105], 
-            "Revenue": [1500, 2300, -50, 4100, 99999, 99999], 
-            "Cost": [1000, 2500, 20, 3000, 50000, 50000], 
-            "Date": ["2023-01-01", "2023-01-02", None, "2023-01-04", "2023-01-05", "2023-01-05"], 
-            "Category": ["Tech", "Home", "Tech", "Toys", "Tech", "Tech"]
+            "Transaction_ID": np.arange(10000, 10000 + n),
+            "Customer_ID": np.random.randint(1000, 5000, n),
+            "Region": np.random.choice(["North", "South", "East", "West"], n),
+            "Category": np.random.choice(
+                ["Electronics", "Furniture", "Clothing", "Sports"], n
+            ),
+            "Revenue": np.random.normal(8000, 2500, n).round(2),
+            "Cost": np.random.normal(5500, 1800, n).round(2),
+            "Discount": np.random.uniform(0, 0.35, n).round(2),
+            "Order_Date": pd.date_range("2023-01-01", periods=n, freq="D")
         })
+
+        # Inject quality issues
+        df.loc[np.random.choice(n, 60), "Revenue"] = -200
+        df.loc[np.random.choice(n, 50), "Cost"] = np.nan
+        df.loc[np.random.choice(n, 30), "Category"] = None
+        df = pd.concat([df, df.iloc[:12]])
 
 except Exception as e:
     st.error(f"Error loading data: {e}")
     st.stop()
 
-# -----------------------------
-# Main App Logic
-# -----------------------------
+# -------------------------------------------------
+# MAIN LOGIC
+# -------------------------------------------------
 if df is not None:
+
     auditor = GuardianAuditor(df)
 
+    # Sidebar settings
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### Audit Settings")
+    st.sidebar.subheader("Audit Settings")
 
-    numeric_columns_available = df.select_dtypes(include=["number"]).columns.tolist()
+    numeric_cols_available = df.select_dtypes(include=["number"]).columns.tolist()
 
     numeric_cols = st.sidebar.multiselect(
-        "Select Numeric Columns for Validity/Accuracy Check",
-        numeric_columns_available,
-        default=["Revenue", "Cost"] if st.session_state.use_sample_data else None
+        "Numeric Columns",
+        numeric_cols_available,
+        default=[col for col in ["Revenue", "Cost"] if col in numeric_cols_available]
     )
 
     date_col = st.sidebar.selectbox(
-        "Select Date Column for Timeliness Check",
-        ["None"] + df.columns.tolist(),
-        index=df.columns.tolist().index("Date") + 1 if st.session_state.use_sample_data else 0
+        "Date Column",
+        ["None"] + df.columns.tolist()
     )
 
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Consistency Rules")
-    st.sidebar.info("Rule: Column A should be >= Column B")
-
     col_list = df.columns.tolist()
-    default_a = col_list.index("Revenue") if st.session_state.use_sample_data else 0
-    col_a = st.sidebar.selectbox("Select Column A", col_list, index=default_a)
 
-    default_b = col_list.index("Cost") if st.session_state.use_sample_data else (1 if len(col_list) > 1 else 0)
-    col_b = st.sidebar.selectbox("Select Column B", col_list, index=default_b)
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Consistency Rule")
+    st.sidebar.caption("Column A must be greater than or equal to Column B")
 
-    # Run Checks
+    col_a = st.sidebar.selectbox("Column A", col_list, index=0)
+    col_b = st.sidebar.selectbox("Column B", col_list, index=1 if len(col_list) > 1 else 0)
+
+    # Run checks
     completeness_dict = auditor.check_completeness()
     dupe_count = auditor.check_uniqueness()
 
-    validity_results = {}
-    outlier_results = {}
-
-    if numeric_cols:
-        validity_results = auditor.check_validity(numeric_cols)
-        outlier_results = auditor.check_accuracy(numeric_cols)
+    validity_results = auditor.check_validity(numeric_cols) if numeric_cols else {}
+    outlier_results = auditor.check_accuracy(numeric_cols) if numeric_cols else {}
 
     if date_col != "None":
         auditor.check_timeliness(date_col)
@@ -117,107 +149,170 @@ if df is not None:
     inc_count = auditor.check_consistency(col_a, col_b)
     overall_score = auditor.get_overall_health_score()
 
-    # Top Metrics
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Overall Data Health", f"{overall_score:.1f}%")
-    col2.metric("Total Records", len(df))
-    col3.metric("Duplicate Rows", dupe_count)
-    col4.metric("Missing Values", sum(completeness_dict.values()) if completeness_dict else 0)
+    # -------------------------------------------------
+    # TOP METRICS
+    # -------------------------------------------------
+    total_missing = sum(completeness_dict.values())
+    total_cells = df.shape[0] * df.shape[1]
+    missing_pct = round((total_missing / total_cells) * 100, 2)
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Overall Data Health", f"{overall_score:.1f}%")
+    m2.metric("Total Records", f"{len(df):,}")
+    m3.metric("Duplicate Rows", f"{dupe_count:,}")
+    m4.metric("Missing Values", f"{total_missing:,} ({missing_pct}%)")
 
     st.markdown("---")
 
-    # Tabs
+    # -------------------------------------------------
+    # TABS
+    # -------------------------------------------------
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📊 Profiling & Completeness",
-        "🧪 Validity & Dupes",
-        "🎯 Accuracy & Consistency",
-        "🗂️ Data View",
-        "🧹 Remediation (Fix Data)"
+        "Profiling",
+        "Validity",
+        "Accuracy",
+        "Dataset",
+        "Remediation"
     ])
 
-    # TAB 1: PROFILING & COMPLETENESS
+    # -------------------------------------------------
+    # TAB 1 — PROFILING
+    # -------------------------------------------------
     with tab1:
-        st.write("### Missing Values")
+
+        st.subheader("Missing Values by Column")
+
         if completeness_dict:
-            null_df = pd.DataFrame(list(completeness_dict.items()), columns=["Column", "Missing Count"])
-            fig = px.bar(null_df, x="Column", y="Missing Count", color="Missing Count", color_continuous_scale="Reds")
+            null_df = pd.DataFrame(
+                list(completeness_dict.items()),
+                columns=["Column", "Missing Count"]
+            )
+
+            null_df["Missing %"] = (
+                null_df["Missing Count"] / len(df) * 100
+            ).round(2)
+
+            null_df = null_df.sort_values("Missing %", ascending=False)
+
+            fig = px.bar(
+                null_df,
+                x="Column",
+                y="Missing %",
+                text="Missing %",
+                color="Missing %",
+                color_continuous_scale="Blues",
+                template="plotly_white"
+            )
+
+            fig.update_traces(texttemplate='%{text}%', textposition='outside')
+            fig.update_layout(
+                height=500,
+                yaxis_title="Missing Percentage (%)",
+                xaxis_title="Columns",
+                showlegend=False
+            )
+
             st.plotly_chart(fig, use_container_width=True)
-        
-        st.write("### Data Types & Unique Values")
+
+        st.subheader("Schema Overview")
+
         schema_df = pd.DataFrame({
             "Data Type": df.dtypes.astype(str),
             "Unique Values": df.nunique(),
-            "Memory Usage (Bytes)": df.memory_usage(deep=True)[1:]
+            "Memory Usage (KB)": (df.memory_usage(deep=True) / 1024).round(2)
         })
+
         st.dataframe(schema_df, use_container_width=True)
 
-    # TAB 2: VALIDITY & DUPES
+    # -------------------------------------------------
+    # TAB 2 — VALIDITY
+    # -------------------------------------------------
     with tab2:
-        col_left, col_right = st.columns(2)
-        with col_left:
-            st.write("### Uniqueness Check")
-            if dupe_count > 0:
-                st.error(f"Found {dupe_count} duplicate rows.")
-            else:
-                st.success("No duplicates detected!")
 
-        with col_right:
-            st.write("### Validity (Negative Value Check)")
+        colL, colR = st.columns(2)
+
+        with colL:
+            st.subheader("Duplicate Check")
+            if dupe_count > 0:
+                st.error(f"{dupe_count:,} duplicate rows detected.")
+            else:
+                st.success("No duplicate rows detected.")
+
+        with colR:
+            st.subheader("Negative Value Check")
             if numeric_cols:
                 st.json(validity_results)
             else:
-                st.info("Select numeric columns in sidebar.")
+                st.info("Select numeric columns in the sidebar.")
 
-    # TAB 3: ACCURACY & CONSISTENCY
+    # -------------------------------------------------
+    # TAB 3 — ACCURACY
+    # -------------------------------------------------
     with tab3:
-        st.write("### Accuracy (Outlier Detection)")
+
+        st.subheader("Outlier Distribution")
+
         if numeric_cols:
-            fig_box = px.box(df, y=numeric_cols, title="Outlier Visualization", template="plotly_dark")
+            fig_box = px.box(
+                df,
+                y=numeric_cols,
+                points="outliers",
+                template="plotly_white"
+            )
+
+            fig_box.update_layout(height=500)
             st.plotly_chart(fig_box, use_container_width=True)
             st.json(outlier_results)
         else:
-            st.info("Select numeric columns to see outliers.")
-            
-    # TAB 4: DATA VIEW
+            st.info("Select numeric columns.")
+
+    # -------------------------------------------------
+    # TAB 4 — DATA VIEW
+    # -------------------------------------------------
     with tab4:
         st.dataframe(df, use_container_width=True)
 
-    # TAB 5: REMEDIATION (NEW)
+    # -------------------------------------------------
+    # TAB 5 — REMEDIATION
+    # -------------------------------------------------
     with tab5:
-        st.write("### Clean Your Data")
-        st.markdown("Select operations to apply to your dataset, then download the cleaned version.")
-        
-        col_a, col_b = st.columns(2)
-        with col_a:
-            drop_dupes = st.checkbox("Drop Duplicate Rows")
-            handle_nulls = st.selectbox("Handle Missing Values", ["Do Nothing", "Drop Rows with Nulls", "Fill with 'Unknown' or 0"])
-        
-        if st.button("Apply Cleaning Rules"):
+
+        st.subheader("Apply Cleaning Rules")
+
+        drop_dupes = st.checkbox("Remove duplicate rows")
+        null_option = st.selectbox(
+            "Handle missing values",
+            ["Do Nothing", "Drop rows with nulls", "Fill numeric with 0 & text with 'Unknown'"]
+        )
+
+        if st.button("Apply Cleaning"):
+
             clean_df = df.copy()
-            
+
             if drop_dupes:
                 clean_df = clean_df.drop_duplicates()
-                
-            if handle_nulls == "Drop Rows with Nulls":
+
+            if null_option == "Drop rows with nulls":
                 clean_df = clean_df.dropna()
-            elif handle_nulls == "Fill with 'Unknown' or 0":
-                # Fill numbers with 0, objects with "Unknown"
-                num_cols = clean_df.select_dtypes(include=['number']).columns
-                obj_cols = clean_df.select_dtypes(exclude=['number']).columns
+
+            elif null_option == "Fill numeric with 0 & text with 'Unknown'":
+                num_cols = clean_df.select_dtypes(include=["number"]).columns
+                obj_cols = clean_df.select_dtypes(exclude=["number"]).columns
                 clean_df[num_cols] = clean_df[num_cols].fillna(0)
                 clean_df[obj_cols] = clean_df[obj_cols].fillna("Unknown")
-            
+
             st.session_state.cleaned_df = clean_df
-            st.success("Data cleaned successfully!")
+            st.success("Cleaning complete.")
 
         if st.session_state.cleaned_df is not None:
-            st.write("#### Preview of Cleaned Data")
-            st.dataframe(st.session_state.cleaned_df.head())
-            
-            # Export functionality
-            csv = st.session_state.cleaned_df.to_csv(index=False).encode('utf-8')
+
+            st.subheader("Preview of Cleaned Data")
+            st.dataframe(st.session_state.cleaned_df.head(), use_container_width=True)
+
+            csv = st.session_state.cleaned_df.to_csv(index=False).encode("utf-8")
+
             st.download_button(
-                label="📥 Download Cleaned CSV",
+                label="Download Cleaned CSV",
                 data=csv,
                 file_name="guardian_cleaned_data.csv",
                 mime="text/csv",
@@ -225,7 +320,4 @@ if df is not None:
             )
 
 else:
-    st.info("Please upload a CSV file or load the sample dataset to begin auditing.")
-    st.image("https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=2070", 
-             caption="Upload a dataset to generate a Data Health Report",
-             use_container_width=True)
+    st.info("Upload a dataset or load the enterprise sample dataset to begin.")
